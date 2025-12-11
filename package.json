@@ -1,0 +1,42 @@
+{
+  "name": "youtube-extractor",
+  "version": "1.0.0",
+  "description": "Scraper leve e rápido do YouTube para detectar vídeos, shorts, lives e VODs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "dev": "ts-node src/main.ts",
+    "monitor": "ts-node src/main.ts",
+    "monitor:add": "ts-node src/main.ts --add",
+    "test": "ts-node examples/test-scraper.ts",
+    "test:channel": "ts-node examples/test-scraper.ts --test channel",
+    "test:videos": "ts-node examples/test-scraper.ts --test videos",
+    "test:live": "ts-node examples/test-scraper.ts --test live"
+  },
+  "keywords": [
+    "youtube",
+    "scraper",
+    "rss",
+    "live",
+    "shorts",
+    "monitor"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "fast-xml-parser": "^4.3.2",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.15.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,15 @@
+# Ignorar no build Docker
+node_modules
+dist
+.git
+.gitignore
+*.md
+.env
+.env.*
+data/
+*.db
+*.db-*
+.cursor
+.vscode
+examples/
+

@@ -1,0 +1,41 @@
+# ===========================================
+# Render Blueprint - YouTube Monitor
+# ===========================================
+# Deploy: conecte o repo no Render e ele detecta automaticamente
+
+services:
+  # Web Service - API + Monitor
+  - type: web
+    name: youtube-monitor
+    runtime: node
+    region: oregon  # ou sao-paulo se disponível no seu plano
+    plan: free      # free, starter, standard, etc
+
+    # Build e Start
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+
+    # Variáveis de ambiente
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
+      - key: POLLING_INTERVAL
+        value: 180
+      - key: CLASSIFY_VIDEOS
+        value: true
+      - key: MAX_VIDEOS_PER_FEED
+        value: 15
+      # Database - configure manualmente no dashboard ou conecte um Render PostgreSQL
+      - key: DATABASE_URL
+        sync: false  # Indica que deve ser configurado manualmente
+
+    # Health check (opcional, mas recomendado)
+    healthCheckPath: /api/status
+
+    # Auto deploy quando houver push no branch
+    autoDeploy: true
+
