@@ -158,18 +158,23 @@ export class YouTubeScraper {
         // A página pode mostrar lives recomendadas de outros canais
         let correctVideoId: string | null = null;
         
-        // Debug: Lista todos os pares videoId/channelId encontrados
-        const allPairs = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"[^}]*"channelId":"([^"]+)"/g);
-        if (allPairs) {
-          const uniquePairs = new Set<string>();
-          for (const pair of allPairs.slice(0, 10)) {
-            const videoMatch = pair.match(/"videoId":"([^"]+)"/);
-            const channelMatch = pair.match(/"channelId":"([^"]+)"/);
-            if (videoMatch && channelMatch) {
-              uniquePairs.add(`${videoMatch[1]} -> ${channelMatch[1]}`);
-            }
-          }
-          console.log(`🔍 Pares encontrados: ${[...uniquePairs].join(', ')}`);
+        // Debug: Lista todos os videoIds e channelIds encontrados separadamente
+        const allVideoIds = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/g);
+        const allChannelIds = html.match(/"channelId":"([^"]+)"/g);
+        
+        if (allVideoIds) {
+          const uniqueVideoIds = [...new Set(allVideoIds.map(m => m.match(/"videoId":"([^"]+)"/)?.[1]))].slice(0, 5);
+          console.log(`🔍 VideoIds encontrados: ${uniqueVideoIds.join(', ')}`);
+        } else {
+          console.log(`🔍 Nenhum videoId encontrado no HTML`);
+        }
+        
+        if (allChannelIds) {
+          const uniqueChannelIds = [...new Set(allChannelIds.map(m => m.match(/"channelId":"([^"]+)"/)?.[1]))].slice(0, 5);
+          console.log(`🔍 ChannelIds encontrados: ${uniqueChannelIds.join(', ')}`);
+          console.log(`🔍 Canal alvo está presente: ${uniqueChannelIds.includes(channelId)}`);
+        } else {
+          console.log(`🔍 Nenhum channelId encontrado no HTML`);
         }
         
         // Método 1: Procura pelo padrão exato "videoId" seguido de "channelId" no mesmo objeto
