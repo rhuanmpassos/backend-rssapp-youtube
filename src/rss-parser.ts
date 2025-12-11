@@ -137,8 +137,10 @@ export async function getAllChannelVideos(
 
   const feedsToFetch: FeedType[] = [];
   
-  if (includeVideos) feedsToFetch.push('videos');
+  // IMPORTANTE: Lives primeiro para que VODs sejam identificados corretamente
+  // na deduplicação (o primeiro item é mantido)
   if (includeLives) feedsToFetch.push('lives');
+  if (includeVideos) feedsToFetch.push('videos');
   if (includeShorts) feedsToFetch.push('shorts');
 
   const results = new Map<FeedType, RSSItem[]>();

@@ -256,17 +256,39 @@ export class YouTubeScraper {
   }
 
   /**
-   * Remove vídeos duplicados
+   * Remove vídeos duplicados, preferindo manter o que tem mais informações
+   * Prioridade: isLive > isLiveContent > isUpcoming > primeiro encontrado
    */
   private deduplicateVideos(videos: VideoInfo[]): VideoInfo[] {
-    const seen = new Set<string>();
-    return videos.filter(video => {
-      if (seen.has(video.videoId)) {
-        return false;
+    const seen = new Map<string, VideoInfo>();
+    
+    for (const video of videos) {
+      const existing = seen.get(video.videoId);
+      
+      if (!existing) {
+        seen.set(video.videoId, video);
+        continue;
       }
-      seen.add(video.videoId);
-      return true;
-    });
+      
+      // Prefere manter o vídeo com mais informações relevantes
+      const shouldReplace = 
+        // Se o novo está ao vivo e o existente não
+        (video.isLive && !existing.isLive) ||
+        // Se o novo é VOD (isLiveContent) e o existente não
+        (video.isLiveContent && !existing.isLiveContent) ||
+        // Se o novo é agendado e o existente não
+        (video.isUpcoming && !existing.isUpcoming) ||
+        // Se o novo tem tipo mais específico (vod > video)
+        (video.type === 'vod' && existing.type === 'video') ||
+        (video.type === 'live' && existing.type === 'video') ||
+        (video.type === 'scheduled' && existing.type === 'video');
+      
+      if (shouldReplace) {
+        seen.set(video.videoId, video);
+      }
+    }
+    
+    return Array.from(seen.values());
   }
 
   /**
