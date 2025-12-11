@@ -3,8 +3,9 @@ import { HttpClient, httpClient } from './http-client';
 
 /**
  * Threshold de duração para shorts (em segundos)
+ * Vídeos com menos de 2 minutos são considerados shorts
  */
-const SHORTS_MAX_DURATION = 90;
+const SHORTS_MAX_DURATION = 120;
 
 /**
  * Padrões para extrair dados do ytInitialPlayerResponse
@@ -24,6 +25,16 @@ const PATTERNS = {
   // isLiveContent: foi uma live (VOD)
   isLiveContent: [
     /"isLiveContent"\s*:\s*true/,
+    /"isLiveContent":true/,
+    /"wasLive"\s*:\s*true/,
+    /"wasLive":true/,
+  ],
+  
+  // Badges que indicam VOD
+  liveBadges: [
+    /Streamed\s+\d+/i,
+    /Transmitido\s+(há|em)/i,
+    /"label"\s*:\s*"(LIVE|AO VIVO)"/i,
   ],
   
   // scheduledStartTime: quando a live vai começar
@@ -60,7 +71,7 @@ export function classifyVideo(props: YTPlayerResponse, feedHint?: 'shorts' | 'li
     return 'vod';
   }
 
-  // 4. Short (duração <= 90s)
+  // 4. Short (duração < 2 min)
   if (duration !== undefined && duration <= SHORTS_MAX_DURATION) {
     return 'short';
   }
@@ -96,11 +107,21 @@ export function extractPlayerResponse(html: string): YTPlayerResponse {
     }
   }
 
-  // Verifica isLiveContent
+  // Verifica isLiveContent (VOD - live que já acabou)
   for (const pattern of PATTERNS.isLiveContent) {
     if (pattern.test(html)) {
       result.isLiveContent = true;
       break;
+    }
+  }
+  
+  // Se não encontrou isLiveContent mas tem badge de live passada, é VOD
+  if (!result.isLiveContent && !result.isLive) {
+    for (const pattern of PATTERNS.liveBadges) {
+      if (pattern.test(html)) {
+        result.isLiveContent = true;
+        break;
+      }
     }
   }
 

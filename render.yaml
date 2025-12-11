@@ -29,9 +29,9 @@ services:
         value: true
       - key: MAX_VIDEOS_PER_FEED
         value: 15
-      # Database - configure manualmente no dashboard ou conecte um Render PostgreSQL
+      # Database - PostgreSQL unificado na EC2
       - key: DATABASE_URL
-        sync: false  # Indica que deve ser configurado manualmente
+        value: postgresql://feeduser:FeedPass2024!@54.87.195.12:5432/unified_feed
 
     # Health check (opcional, mas recomendado)
     healthCheckPath: /api/status
