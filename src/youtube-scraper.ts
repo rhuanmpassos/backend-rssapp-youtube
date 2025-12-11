@@ -155,14 +155,25 @@ export class YouTubeScraper {
         const videoIdMatch = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
         const videoId = videoIdMatch?.[1];
         
+        // IMPORTANTE: Verifica se o vídeo pertence ao canal correto
+        // A página /live pode mostrar lives recomendadas de outros canais
+        const videoChannelMatch = html.match(/"channelId":"([^"]+)"/);
+        const videoChannelId = videoChannelMatch?.[1];
+        
+        // Se o canal do vídeo não for o mesmo, não é a live deste canal
+        if (videoChannelId && videoChannelId !== channelId) {
+          console.log(`⚠️ Live encontrada é de outro canal (${videoChannelId}), ignorando`);
+          return null;
+        }
+        
         if (videoId) {
           // Extrai título - tenta múltiplos padrões
           let title = '';
           const titlePatterns = [
+            /"title":\{"runs":\[\{"text":"([^"]+)"\}\]/,
+            /"title":"([^"]+)"/,
             /<meta name="title" content="([^"]+)">/,
             /<title>([^<]+)<\/title>/,
-            /"title":"([^"]+)"/,
-            /"text":"([^"]+)","navigationEndpoint/,
           ];
           
           for (const pattern of titlePatterns) {
