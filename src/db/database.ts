@@ -35,11 +35,22 @@ export class DatabaseService {
 
   /**
    * Inicializa o banco de dados com as tabelas
+   * Verifica se as tabelas já existem antes de criar para evitar erros de permissão
    */
   async initialize(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      await client.query(CREATE_TABLES_SQL);
+      // Verifica se as tabelas principais já existem
+      const tablesExist = await this.checkTablesExist(client);
+      
+      if (!tablesExist) {
+        // Só executa o schema se as tabelas não existem
+        await client.query(CREATE_TABLES_SQL);
+        console.log('📦 Tabelas criadas com sucesso');
+      } else {
+        console.log('📦 Tabelas já existem, pulando criação');
+      }
+      
       await this.runMigrations(client);
     } finally {
       client.release();
@@ -47,7 +58,24 @@ export class DatabaseService {
   }
 
   /**
+   * Verifica se as tabelas principais já existem no banco
+   */
+  private async checkTablesExist(client: PoolClient): Promise<boolean> {
+    try {
+      const result = await client.query(`
+        SELECT COUNT(*) as count FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name IN ('channels', 'videos', 'events', 'rss_feeds')
+      `);
+      return parseInt(result.rows[0].count) >= 4;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Executa migrations para atualizar banco existente
+   * Silenciosamente ignora erros de permissão (owner)
    */
   private async runMigrations(client: PoolClient): Promise<void> {
     try {
@@ -58,11 +86,23 @@ export class DatabaseService {
       `);
       
       if (result.rows.length === 0) {
-        await client.query('ALTER TABLE videos ADD COLUMN bookmarked INTEGER DEFAULT 0');
-        console.log('📦 Migration: Coluna "bookmarked" adicionada à tabela videos');
+        try {
+          await client.query('ALTER TABLE videos ADD COLUMN bookmarked INTEGER DEFAULT 0');
+          console.log('📦 Migration: Coluna "bookmarked" adicionada à tabela videos');
+        } catch (alterError: any) {
+          // Erro 42501 = permissão insuficiente (não é owner)
+          if (alterError?.code === '42501') {
+            console.log('⚠️ Migration: Sem permissão para alterar tabela (não é owner). Coluna bookmarked pode não existir.');
+          } else {
+            throw alterError;
+          }
+        }
       }
-    } catch (error) {
-      // Ignora erros de migration
+    } catch (error: any) {
+      // Ignora erros de migration que não são críticos
+      if (error?.code !== '42501') {
+        console.warn('⚠️ Migration warning:', error?.message || error);
+      }
     }
   }
 
