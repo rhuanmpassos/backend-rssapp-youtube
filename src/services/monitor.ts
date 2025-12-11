@@ -24,7 +24,7 @@ export interface MonitorConfig {
 
 const DEFAULT_CONFIG: Required<MonitorConfig> = {
   pollingInterval: 3 * 60 * 1000, // 3 minutos
-  classifyVideos: true,
+  classifyVideos: false, // Desabilitado - YouTube bloqueia IPs do Render
   maxVideosPerFeed: 15,
   databaseUrl: process.env.DATABASE_URL || '',
   maxVideosPerChannel: 10, // Mantém apenas 10 vídeos por canal no DB
@@ -142,13 +142,14 @@ export class YouTubeMonitor extends EventEmitter {
         return [];
       }
       
-      // Busca vídeos do canal
+      // Busca vídeos do canal SEM classificação individual
+      // A classificação de lives é feita separadamente (menos requests)
       const videos = await this.scraper.getChannelVideos(channelId, {
-        classifyVideos: this.config.classifyVideos,
+        classifyVideos: false, // Desabilitado - YouTube bloqueia IPs do Render
         maxVideosPerFeed: this.config.maxVideosPerFeed,
         includeVideos: true,
         includeLives: true,
-        includeShorts: true,
+        includeShorts: false, // Não precisa de shorts
       });
 
       // Obtém info do canal do cache ou banco
@@ -166,32 +167,46 @@ export class YouTubeMonitor extends EventEmitter {
         }
       }
 
-      // Processa cada vídeo (com filtros)
+      // Verifica status de lives ao vivo (apenas 1 request por canal)
+      const liveNow = await this.scraper.checkLiveStatus(channelId);
+      if (liveNow && channelInfo) {
+        // Atualiza ou adiciona a live ao vivo
+        const { event } = await db.upsertVideo(liveNow, channelId);
+        if (event) {
+          this.emit(event, liveNow, channelInfo);
+        }
+      }
+
+      // Processa apenas vídeos normais (não VODs, não shorts)
       for (const video of videos) {
-        // Filtro: ignora shorts (< 2 min)
+        // Filtro: ignora shorts (< 2 min) - redundante mas seguro
         if (video.type === 'short' || (video.duration && video.duration < 120)) {
           continue;
         }
         
-        // Filtro: ignora VODs
-        if (video.type === 'vod') {
+        // Filtro: ignora VODs (gravações de lives passadas)
+        // VODs vêm do feed de lives e já foram verificados acima
+        if (video.type === 'vod' || video.isLiveContent) {
           continue;
         }
         
-        // Filtro: ignora lives programadas (apenas lives ao vivo)
-        if (video.isUpcoming && !video.isLive) {
+        // Filtro: ignora lives (já processadas acima)
+        if (video.type === 'live' || video.isLive) {
           continue;
         }
         
-        const { event } = await db.upsertVideo(video, channelId);
-        
-        // Emite evento se houver mudança
-        if (event && channelInfo) {
-          this.emit(event, video, channelInfo);
+        // Salva apenas vídeos normais
+        if (video.type === 'video') {
+          const { event } = await db.upsertVideo(video, channelId);
+          
+          // Emite evento se houver mudança
+          if (event && channelInfo) {
+            this.emit(event, video, channelInfo);
+          }
         }
       }
       
-      // Remove lives que terminaram (viraram VOD)
+      // Remove lives que terminaram (não estão mais ao vivo)
       await this.cleanupEndedLives(channelId, videos);
 
       // Atualiza timestamp de verificação

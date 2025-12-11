@@ -140,52 +140,44 @@ export class YouTubeScraper {
   }
 
   /**
-   * Verifica se há live ativa no canal
+   * Verifica se há live ativa no canal (apenas 1 request)
    */
   async checkLiveStatus(channelId: string): Promise<VideoInfo | null> {
     try {
-      // Primeiro busca o feed de lives
-      const liveItems = await parseRSSFeed(channelId, 'lives', this.client);
+      // Verifica a página /live do canal (1 único request)
+      const channelLiveUrl = `https://www.youtube.com/channel/${channelId}/live`;
       
-      if (liveItems.length === 0) {
-        return null;
-      }
-
-      // Verifica os primeiros vídeos do feed
-      for (const item of liveItems.slice(0, 3)) {
-        const details = await this.getVideoDetails(item.videoId);
+      const html = await this.client.get(channelLiveUrl);
+      const props = extractPlayerResponse(html);
+      
+      if (props.isLive) {
+        // Extrai videoId da página
+        const videoIdMatch = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+        const videoId = videoIdMatch?.[1];
         
-        if (details && details.isLive) {
+        if (videoId) {
+          // Extrai título do HTML
+          const titleMatch = html.match(/<meta name="title" content="([^"]+)">/);
+          const title = titleMatch?.[1] || '';
+          
           return {
-            ...details,
-            publishedAt: item.publishedAt,
+            videoId,
+            title: this.decodeHtmlEntities(title),
+            publishedAt: new Date(),
+            thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+            type: 'live',
+            duration: undefined,
+            scheduledStartTime: props.scheduledStartTime,
+            isLive: true,
+            isLiveContent: false,
+            isUpcoming: false,
           };
         }
       }
 
-      // Também checa a página do canal/live
-      const channelLiveUrl = `https://www.youtube.com/channel/${channelId}/live`;
-      
-      try {
-        const html = await this.client.get(channelLiveUrl);
-        const props = extractPlayerResponse(html);
-        
-        if (props.isLive) {
-          // Extrai videoId da página
-          const videoIdMatch = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-          const videoId = videoIdMatch?.[1];
-          
-          if (videoId) {
-            return this.getVideoDetails(videoId);
-          }
-        }
-      } catch {
-        // Página /live pode não existir
-      }
-
       return null;
     } catch (error) {
-      console.error(`Erro ao verificar live status de ${channelId}:`, error);
+      // Página /live pode não existir ou estar bloqueada - isso é normal
       return null;
     }
   }
