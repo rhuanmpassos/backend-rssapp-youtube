@@ -203,26 +203,41 @@ export class YouTubeScraper {
           }
         }
         
-        // Método 3: Procura o channelId e pega o videoId mais próximo
+        // Método 3: Se o channelId alvo está presente no HTML, usa o primeiro videoId
+        // Isso funciona porque a página /live do canal só mostra o channelId do dono quando há live ativa
+        if (!correctVideoId && allVideoIds && allChannelIds) {
+          const uniqueChannelIds = [...new Set(allChannelIds.map(m => m.match(/"channelId":"([^"]+)"/)?.[1]))];
+          
+          // Se o único channelId no HTML é o canal alvo, o primeiro videoId é a live
+          if (uniqueChannelIds.length === 1 && uniqueChannelIds[0] === channelId) {
+            const firstVideoId = allVideoIds[0]?.match(/"videoId":"([^"]+)"/)?.[1];
+            if (firstVideoId) {
+              correctVideoId = firstVideoId;
+              console.log(`🔍 Método 3: Canal único detectado, usando primeiro videoId: ${correctVideoId}`);
+            }
+          }
+        }
+        
+        // Método 4: Procura o channelId e pega o videoId mais próximo
         if (!correctVideoId) {
           const channelIdIndex = html.indexOf(`"channelId":"${channelId}"`);
           if (channelIdIndex !== -1) {
-            // Procura videoId antes do channelId (até 500 chars)
-            const beforeText = html.substring(Math.max(0, channelIdIndex - 500), channelIdIndex);
+            // Procura videoId antes do channelId (até 1000 chars)
+            const beforeText = html.substring(Math.max(0, channelIdIndex - 1000), channelIdIndex);
             const videoIdMatchBefore = beforeText.match(/"videoId":"([a-zA-Z0-9_-]{11})"/g);
             if (videoIdMatchBefore && videoIdMatchBefore.length > 0) {
               const lastMatch = videoIdMatchBefore[videoIdMatchBefore.length - 1];
               correctVideoId = lastMatch.match(/"videoId":"([^"]+)"/)?.[1] || null;
-              console.log(`🔍 Método 3a: Encontrado videoId ${correctVideoId} (antes do channelId)`);
+              console.log(`🔍 Método 4a: Encontrado videoId ${correctVideoId} (antes do channelId)`);
             }
             
             // Se não encontrou, procura depois do channelId
             if (!correctVideoId) {
-              const afterText = html.substring(channelIdIndex, channelIdIndex + 500);
+              const afterText = html.substring(channelIdIndex, channelIdIndex + 1000);
               const videoIdMatchAfter = afterText.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
               if (videoIdMatchAfter) {
                 correctVideoId = videoIdMatchAfter[1];
-                console.log(`🔍 Método 3b: Encontrado videoId ${correctVideoId} (depois do channelId)`);
+                console.log(`🔍 Método 4b: Encontrado videoId ${correctVideoId} (depois do channelId)`);
               }
             }
           }
