@@ -151,54 +151,79 @@ export class YouTubeScraper {
       const props = extractPlayerResponse(html);
       
       if (props.isLive) {
-        // Extrai videoId da página
-        const videoIdMatch = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-        const videoId = videoIdMatch?.[1];
+        // IMPORTANTE: Encontra o videoId que pertence ao canal correto
+        // A página pode mostrar lives recomendadas de outros canais
+        // Procura pelo padrão que associa videoId e channelId juntos
+        const videoChannelPattern = /"videoId":"([a-zA-Z0-9_-]{11})"[^}]*"channelId":"([^"]+)"/g;
+        let correctVideoId: string | null = null;
+        let match;
         
-        // IMPORTANTE: Verifica se o vídeo pertence ao canal correto
-        // A página /live pode mostrar lives recomendadas de outros canais
-        const videoChannelMatch = html.match(/"channelId":"([^"]+)"/);
-        const videoChannelId = videoChannelMatch?.[1];
+        while ((match = videoChannelPattern.exec(html)) !== null) {
+          const [, videoId, videoChannelId] = match;
+          if (videoChannelId === channelId) {
+            correctVideoId = videoId;
+            break;
+          }
+        }
         
-        // Se o canal do vídeo não for o mesmo, não é a live deste canal
-        if (videoChannelId && videoChannelId !== channelId) {
-          console.log(`⚠️ Live encontrada é de outro canal (${videoChannelId}), ignorando`);
+        // Se não encontrou com o padrão acima, tenta outro método
+        if (!correctVideoId) {
+          // Procura todos os videoIds e verifica qual pertence ao canal
+          const allVideoIds = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/g);
+          if (allVideoIds) {
+            const uniqueVideoIds = [...new Set(allVideoIds.map(m => m.match(/"videoId":"([^"]+)"/)?.[1]).filter(Boolean))];
+            // O primeiro videoId geralmente é o correto, mas vamos verificar
+            // procurando pelo channelId próximo
+            for (const vid of uniqueVideoIds) {
+              // Procura o channelId próximo a este videoId
+              const pattern = new RegExp(`"videoId":"${vid}"[\\s\\S]{0,500}"channelId":"([^"]+)"`);
+              const channelMatch = html.match(pattern);
+              if (channelMatch && channelMatch[1] === channelId) {
+                correctVideoId = vid!;
+                break;
+              }
+            }
+          }
+        }
+        
+        if (!correctVideoId) {
+          console.log(`⚠️ Nenhuma live encontrada para o canal ${channelId}`);
           return null;
         }
         
-        if (videoId) {
-          // Extrai título - tenta múltiplos padrões
-          let title = '';
-          const titlePatterns = [
-            /"title":\{"runs":\[\{"text":"([^"]+)"\}\]/,
-            /"title":"([^"]+)"/,
-            /<meta name="title" content="([^"]+)">/,
-            /<title>([^<]+)<\/title>/,
-          ];
-          
-          for (const pattern of titlePatterns) {
-            const match = html.match(pattern);
-            if (match && match[1]) {
-              title = match[1];
-              // Remove sufixo " - YouTube"
-              title = title.replace(/ - YouTube$/, '');
-              break;
-            }
+        // Extrai título - tenta múltiplos padrões
+        let title = '';
+        const titlePatterns = [
+          /"title":\{"runs":\[\{"text":"([^"]+)"\}\]/,
+          /"title":"([^"]+)"/,
+          /<meta name="title" content="([^"]+)">/,
+          /<title>([^<]+)<\/title>/,
+        ];
+        
+        for (const pattern of titlePatterns) {
+          const titleMatch = html.match(pattern);
+          if (titleMatch && titleMatch[1]) {
+            title = titleMatch[1];
+            // Remove sufixo " - YouTube"
+            title = title.replace(/ - YouTube$/, '');
+            break;
           }
-          
-          return {
-            videoId,
-            title: this.decodeHtmlEntities(title),
-            publishedAt: new Date(),
-            thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
-            type: 'live',
-            duration: undefined,
-            scheduledStartTime: props.scheduledStartTime,
-            isLive: true,
-            isLiveContent: false,
-            isUpcoming: false,
-          };
         }
+        
+        console.log(`🔴 Live encontrada: ${correctVideoId} - "${title}"`);
+        
+        return {
+          videoId: correctVideoId,
+          title: this.decodeHtmlEntities(title),
+          publishedAt: new Date(),
+          thumbnailUrl: `https://i.ytimg.com/vi/${correctVideoId}/maxresdefault.jpg`,
+          type: 'live',
+          duration: undefined,
+          scheduledStartTime: props.scheduledStartTime,
+          isLive: true,
+          isLiveContent: false,
+          isUpcoming: false,
+        };
       }
 
       return null;
