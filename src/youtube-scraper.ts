@@ -150,10 +150,27 @@ export class YouTubeScraper {
       const html = await this.client.get(channelLiveUrl);
       const props = extractPlayerResponse(html);
       
+      // Log para debug: mostra se isLive é true
+      console.log(`🔍 checkLiveStatus: isLive=${props.isLive}, channelId=${channelId}`);
+      
       if (props.isLive) {
         // IMPORTANTE: Encontra o videoId que pertence ao canal correto
         // A página pode mostrar lives recomendadas de outros canais
         let correctVideoId: string | null = null;
+        
+        // Debug: Lista todos os pares videoId/channelId encontrados
+        const allPairs = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"[^}]*"channelId":"([^"]+)"/g);
+        if (allPairs) {
+          const uniquePairs = new Set<string>();
+          for (const pair of allPairs.slice(0, 10)) {
+            const videoMatch = pair.match(/"videoId":"([^"]+)"/);
+            const channelMatch = pair.match(/"channelId":"([^"]+)"/);
+            if (videoMatch && channelMatch) {
+              uniquePairs.add(`${videoMatch[1]} -> ${channelMatch[1]}`);
+            }
+          }
+          console.log(`🔍 Pares encontrados: ${[...uniquePairs].join(', ')}`);
+        }
         
         // Método 1: Procura pelo padrão exato "videoId" seguido de "channelId" no mesmo objeto
         const videoChannelPattern = /"videoId":"([a-zA-Z0-9_-]{11})"[^}]*"channelId":"([^"]+)"/g;
