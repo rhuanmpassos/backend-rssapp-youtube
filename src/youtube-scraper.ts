@@ -153,41 +153,61 @@ export class YouTubeScraper {
       if (props.isLive) {
         // IMPORTANTE: Encontra o videoId que pertence ao canal correto
         // A página pode mostrar lives recomendadas de outros canais
-        // Procura pelo padrão que associa videoId e channelId juntos
-        const videoChannelPattern = /"videoId":"([a-zA-Z0-9_-]{11})"[^}]*"channelId":"([^"]+)"/g;
         let correctVideoId: string | null = null;
+        
+        // Método 1: Procura pelo padrão exato "videoId" seguido de "channelId" no mesmo objeto
+        const videoChannelPattern = /"videoId":"([a-zA-Z0-9_-]{11})"[^}]*"channelId":"([^"]+)"/g;
         let match;
         
         while ((match = videoChannelPattern.exec(html)) !== null) {
           const [, videoId, videoChannelId] = match;
           if (videoChannelId === channelId) {
             correctVideoId = videoId;
+            console.log(`🔍 Método 1: Encontrado videoId ${videoId} para canal ${channelId}`);
             break;
           }
         }
         
-        // Se não encontrou com o padrão acima, tenta outro método
+        // Método 2: Procura channelId seguido de videoId (ordem inversa)
         if (!correctVideoId) {
-          // Procura todos os videoIds e verifica qual pertence ao canal
-          const allVideoIds = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/g);
-          if (allVideoIds) {
-            const uniqueVideoIds = [...new Set(allVideoIds.map(m => m.match(/"videoId":"([^"]+)"/)?.[1]).filter(Boolean))];
-            // O primeiro videoId geralmente é o correto, mas vamos verificar
-            // procurando pelo channelId próximo
-            for (const vid of uniqueVideoIds) {
-              // Procura o channelId próximo a este videoId
-              const pattern = new RegExp(`"videoId":"${vid}"[\\s\\S]{0,500}"channelId":"([^"]+)"`);
-              const channelMatch = html.match(pattern);
-              if (channelMatch && channelMatch[1] === channelId) {
-                correctVideoId = vid!;
-                break;
+          const reversePattern = /"channelId":"([^"]+)"[^}]*"videoId":"([a-zA-Z0-9_-]{11})"/g;
+          while ((match = reversePattern.exec(html)) !== null) {
+            const [, videoChannelId, videoId] = match;
+            if (videoChannelId === channelId) {
+              correctVideoId = videoId;
+              console.log(`🔍 Método 2: Encontrado videoId ${videoId} para canal ${channelId}`);
+              break;
+            }
+          }
+        }
+        
+        // Método 3: Procura o channelId e pega o videoId mais próximo
+        if (!correctVideoId) {
+          const channelIdIndex = html.indexOf(`"channelId":"${channelId}"`);
+          if (channelIdIndex !== -1) {
+            // Procura videoId antes do channelId (até 500 chars)
+            const beforeText = html.substring(Math.max(0, channelIdIndex - 500), channelIdIndex);
+            const videoIdMatchBefore = beforeText.match(/"videoId":"([a-zA-Z0-9_-]{11})"/g);
+            if (videoIdMatchBefore && videoIdMatchBefore.length > 0) {
+              const lastMatch = videoIdMatchBefore[videoIdMatchBefore.length - 1];
+              correctVideoId = lastMatch.match(/"videoId":"([^"]+)"/)?.[1] || null;
+              console.log(`🔍 Método 3a: Encontrado videoId ${correctVideoId} (antes do channelId)`);
+            }
+            
+            // Se não encontrou, procura depois do channelId
+            if (!correctVideoId) {
+              const afterText = html.substring(channelIdIndex, channelIdIndex + 500);
+              const videoIdMatchAfter = afterText.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+              if (videoIdMatchAfter) {
+                correctVideoId = videoIdMatchAfter[1];
+                console.log(`🔍 Método 3b: Encontrado videoId ${correctVideoId} (depois do channelId)`);
               }
             }
           }
         }
         
         if (!correctVideoId) {
-          console.log(`⚠️ Nenhuma live encontrada para o canal ${channelId}`);
+          console.log(`⚠️ Nenhuma live encontrada para o canal ${channelId} (HTML length: ${html.length})`);
           return null;
         }
         
