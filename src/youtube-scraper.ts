@@ -156,9 +156,24 @@ export class YouTubeScraper {
         const videoId = videoIdMatch?.[1];
         
         if (videoId) {
-          // Extrai título do HTML
-          const titleMatch = html.match(/<meta name="title" content="([^"]+)">/);
-          const title = titleMatch?.[1] || '';
+          // Extrai título - tenta múltiplos padrões
+          let title = '';
+          const titlePatterns = [
+            /<meta name="title" content="([^"]+)">/,
+            /<title>([^<]+)<\/title>/,
+            /"title":"([^"]+)"/,
+            /"text":"([^"]+)","navigationEndpoint/,
+          ];
+          
+          for (const pattern of titlePatterns) {
+            const match = html.match(pattern);
+            if (match && match[1]) {
+              title = match[1];
+              // Remove sufixo " - YouTube"
+              title = title.replace(/ - YouTube$/, '');
+              break;
+            }
+          }
           
           return {
             videoId,

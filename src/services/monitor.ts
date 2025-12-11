@@ -149,7 +149,7 @@ export class YouTubeMonitor extends EventEmitter {
         maxVideosPerFeed: this.config.maxVideosPerFeed,
         includeVideos: true,
         includeLives: true,
-        includeShorts: false, // Não precisa de shorts
+        includeShorts: true, // Habilitado para identificar e filtrar shorts
       });
 
       // Obtém info do canal do cache ou banco
@@ -177,15 +177,36 @@ export class YouTubeMonitor extends EventEmitter {
         }
       }
 
+      // Coleta IDs de shorts para filtrar (vídeos que aparecem no feed de shorts)
+      const shortVideoIds = new Set(
+        videos
+          .filter(v => v.type === 'short')
+          .map(v => v.videoId)
+      );
+
       // Processa apenas vídeos normais (não VODs, não shorts)
       for (const video of videos) {
-        // Filtro: ignora shorts (< 2 min) - redundante mas seguro
-        if (video.type === 'short' || (video.duration && video.duration < 120)) {
+        // Filtro: ignora shorts por tipo
+        if (video.type === 'short') {
+          continue;
+        }
+        
+        // Filtro: ignora shorts por duração (< 2 min)
+        if (video.duration && video.duration < 120) {
+          continue;
+        }
+        
+        // Filtro: ignora shorts identificados pelo feed UUSH
+        if (shortVideoIds.has(video.videoId)) {
+          continue;
+        }
+        
+        // Filtro: ignora se tem #shorts no título
+        if (video.title.toLowerCase().includes('#shorts')) {
           continue;
         }
         
         // Filtro: ignora VODs (gravações de lives passadas)
-        // VODs vêm do feed de lives e já foram verificados acima
         if (video.type === 'vod' || video.isLiveContent) {
           continue;
         }
@@ -207,7 +228,8 @@ export class YouTubeMonitor extends EventEmitter {
       }
       
       // Remove lives que terminaram (não estão mais ao vivo)
-      await this.cleanupEndedLives(channelId, videos);
+      // Passa a live atual para não ser removida
+      await this.cleanupEndedLives(channelId, liveNow);
 
       // Atualiza timestamp de verificação
       await db.updateChannelLastChecked(channelId);
@@ -376,22 +398,17 @@ export class YouTubeMonitor extends EventEmitter {
   /**
    * Remove lives que terminaram (não estão mais ao vivo)
    */
-  private async cleanupEndedLives(channelId: string, currentVideos: VideoInfo[]): Promise<void> {
+  private async cleanupEndedLives(channelId: string, currentLive: VideoInfo | null): Promise<void> {
     const db = await this.ensureDb();
     
     // Busca lives salvas no banco para este canal
     const savedLives = await db.getLiveVideos(channelId);
     
-    // IDs das lives que ainda estão ao vivo (do scrape atual)
-    const currentLiveIds = new Set(
-      currentVideos
-        .filter(v => v.isLive)
-        .map(v => v.videoId)
-    );
-    
-    // Remove lives que não estão mais ao vivo
+    // Se não há live atual, remove todas as lives salvas deste canal
+    // Se há live atual, mantém apenas ela
     for (const savedLive of savedLives) {
-      if (!currentLiveIds.has(savedLive.video_id)) {
+      // Se não há live atual OU se a live salva é diferente da atual
+      if (!currentLive || savedLive.video_id !== currentLive.videoId) {
         await db.deleteVideo(savedLive.video_id);
         console.log(`🔴➡️⬛ Live terminada removida: ${savedLive.title}`);
       }
